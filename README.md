@@ -1,7 +1,7 @@
 Activiti BDD
 =============================
 
-A library to support Behaviour Driven Development of business processes with the Activiti BPMN engine. 
+A library to support [Behaviour Driven Development](https://en.wikipedia.org/wiki/Behavior-driven_development) of business processes with the [Activiti BPMN engine](http://activiti.org). 
 
 Installation
 =============================
@@ -33,10 +33,12 @@ Usage
 
 1. Behaviour specifications are written in the usual text format, for example: 
 
-    > GIVEN: No particular pre-conditions
-    > WHEN: The Example1 process is started
-    > THEN: User Task 'doSomething' is created and completed
-    > THEN: The process is complete
+   ```
+   GIVEN: No particular pre-conditions
+   WHEN: The Example1 process is started
+   THEN: User Task 'doSomething' is created and completed
+   THEN: The process is complete
+   ```
    
 2. A fluent Java API enables a highly readable translation of the spec to an executable form.
 
@@ -54,4 +56,4 @@ Usage
         .thenProcessIsComplete();
     ```
     
-3. Embedding within a JUnit test provides a simple way to integrate the specification into continuous integration and deployment environments. See Example1.java for the complete class. 
+3. Embedding within a JUnit test provides a simple way to integrate the specification into continuous integration and deployment environments. See [Example1.java](https://github.com/tstephen/activiti-bdd/blob/master/src/test/java/org/activiti/bdd/examples/Example1Test.java) for the complete class. 
