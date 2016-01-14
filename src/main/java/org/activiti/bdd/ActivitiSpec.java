@@ -19,6 +19,7 @@ package org.activiti.bdd;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -33,6 +34,7 @@ import java.util.Map.Entry;
 import java.util.Scanner;
 import java.util.Set;
 
+import org.activiti.engine.history.HistoricProcessInstance;
 import org.activiti.engine.impl.test.JobTestHelper;
 import org.activiti.engine.runtime.Job;
 import org.activiti.engine.runtime.ProcessInstance;
@@ -154,7 +156,7 @@ public class ActivitiSpec {
      * 
      * @param eventDescription
      *            'When' phase of scenario.
-     * @param key
+     * @param msgName
      *            Specifies the message name identifying the Process Definition
      *            to start.
      * @param messageResource
@@ -312,6 +314,45 @@ public class ActivitiSpec {
         writeBddPhrase("WHEN: process time advanced to : %1$s", time.toString());
         activitiRule.setCurrentTime(time);
         return this;
+    }
+
+    /**
+     * Assert that the specified sub-process callActivity has actually been
+     * invoked.
+     * 
+     * @param subProcDefKey
+     *            Key (id without vsn info) of the sub-process that should have
+     *            been invoked.
+     * @return The updated specification.
+     */
+    public ActivitiSpec thenSubProcessCalled(String subProcDefKey) {
+        if (subProcDefKey == null) {
+            throw new IllegalArgumentException("Parameter subProcId must not be null");
+        }
+
+        boolean found = searchForSubProc(subProcDefKey, processInstance.getId());
+        
+        assertTrue(String.format("No call made to %1$s", subProcDefKey), found);
+        writeBddPhrase("THEN: The sub-process %1$s is called", subProcDefKey);
+        return this;
+    }
+
+    private boolean searchForSubProc(String subProcDefKey, String procId) {
+        List<HistoricProcessInstance> childProcessInstances = activitiRule
+                .getHistoryService().createHistoricProcessInstanceQuery()
+                .superProcessInstanceId(procId).list();
+
+        for (HistoricProcessInstance hpi : childProcessInstances) {
+            if (hpi.getProcessDefinitionId().startsWith(subProcDefKey)) {
+                return true;
+            }
+        }
+        for (HistoricProcessInstance hpi : childProcessInstances) {
+            if (searchForSubProc(subProcDefKey, hpi.getId())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
