@@ -34,6 +34,7 @@ import java.util.Map.Entry;
 import java.util.Scanner;
 import java.util.Set;
 
+import org.activiti.engine.ActivitiObjectNotFoundException;
 import org.activiti.engine.history.HistoricProcessInstance;
 import org.activiti.engine.impl.test.JobTestHelper;
 import org.activiti.engine.runtime.Job;
@@ -49,6 +50,8 @@ import org.toxos.activiti.assertion.ProcessAssert;
  * @author Tim Stephenson
  */
 public class ActivitiSpec {
+
+    private static final Set<String> emptySet = new HashSet<String>();
 
     private ActivitiRule activitiRule;
 
@@ -117,6 +120,23 @@ public class ActivitiSpec {
         return processInstance;
     }
 
+    public ActivitiSpec whenEventOccurs(String eventDescription, String key,
+            Set<String> collectVars, Map<String, Object> putVars) {
+        this.processDefinitionKey = key;
+
+        HashMap<String, Object> vars = new HashMap<String, Object>();
+        for (Entry<String, Object> entry : putVars.entrySet()) {
+            vars.put(entry.getKey(), entry.getValue());
+        }
+        processInstance = activitiRule.getRuntimeService()
+                .startProcessInstanceByKey(processDefinitionKey, vars);
+        assertNotNull(processInstance);
+        assertNotNull(processInstance.getId());
+
+        writeBddPhrase("WHEN: %1$s", eventDescription);
+        return this;
+    }
+
     /**
      * Define the start event for the business process.
      * 
@@ -160,7 +180,8 @@ public class ActivitiSpec {
      *            Specifies the message name identifying the Process Definition
      *            to start.
      * @param messageResource
-     *            Classpath resource to load and inject as process variable.
+     *            Classpath resource to load and inject as process variable or
+     *            the variable itself as a string.
      * @param tenantId
      *            Process tenant, may be null.
      * @return The updated specification.
@@ -172,22 +193,17 @@ public class ActivitiSpec {
         InputStream is = null;
         Reader source = null;
         Scanner scanner = null;
+        String json = null;
         try {
             is = getClass().getResourceAsStream(messageResource);
-            assertNotNull("Unable to load test resource: " + messageResource,
-                    is);
+            // assertNotNull("Unable to load test resource: " + messageResource,
+            // is);
             source = new InputStreamReader(is);
             scanner = new Scanner(source);
-            String json = scanner.useDelimiter("\\A").next();
-
-            HashMap<String, Object> vars = new HashMap<String, Object>();
-            vars.put("messageName", adapt(msgName));
-            vars.put(adapt(messageName), json);
-            processInstance = activitiRule.getRuntimeService()
-                    .startProcessInstanceByMessageAndTenantId(msgName,
-                            vars, tenantId);
-            assertNotNull(processInstance);
-            assertNotNull(processInstance.getId());
+            json = scanner.useDelimiter("\\A").next();
+        } catch (NullPointerException e) {
+            // assume message supplied directly
+            json = messageResource;
         } finally {
             try {
                 scanner.close();
@@ -195,6 +211,15 @@ public class ActivitiSpec {
                 ;
             }
         }
+        HashMap<String, Object> vars = new HashMap<String, Object>();
+        vars.put("messageName", adapt(msgName));
+        vars.put(adapt(messageName), json);
+        processInstance = activitiRule.getRuntimeService()
+                .startProcessInstanceByMessageAndTenantId(msgName, vars,
+                        tenantId);
+        assertNotNull(processInstance);
+        assertNotNull(processInstance.getId());
+
         writeBddPhrase("WHEN: %1$s", eventDescription);
         return this;
     }
@@ -398,8 +423,17 @@ public class ActivitiSpec {
      * @return The updated specification.
      */
     public ActivitiSpec collectVar(String varName) {
-        Object var = activitiRule.getRuntimeService().getVariable(
+        Object var = null;
+        try {
+            var = activitiRule.getRuntimeService().getVariable(
                 processInstance.getId(), varName);
+        } catch (ActivitiObjectNotFoundException e) {
+            // assume process ended, try history
+            var = activitiRule.getHistoryService()
+                    .createHistoricVariableInstanceQuery()
+                    .processInstanceId(processInstance.getId())
+                    .variableName(varName).singleResult().getValue();
+        }
         assertNotNull(var);
         collectVars.put(varName, var);
         return this;
@@ -448,6 +482,10 @@ public class ActivitiSpec {
             map.put(pair.getKey(), pair.getValue());
         }
         return map;
+    }
+
+    public static Set<String> emptySet() {
+        return emptySet;
     }
 
 }
