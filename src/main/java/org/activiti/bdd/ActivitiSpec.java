@@ -190,6 +190,51 @@ public class ActivitiSpec {
             String msgName, String messageResource, String tenantId) {
         this.messageName = msgName;
 
+        HashMap<String, Object> vars = new HashMap<String, Object>();
+        vars.put("messageName", adapt(msgName));
+        vars.put(adapt(messageName), getJson(messageResource));
+
+        processInstance = activitiRule.getRuntimeService()
+                .startProcessInstanceByMessageAndTenantId(msgName, vars,
+                        tenantId);
+        assertNotNull(processInstance);
+        assertNotNull(processInstance.getId());
+
+        writeBddPhrase("WHEN: %1$s", eventDescription);
+        return this;
+    }
+
+    /**
+     * Define the message to send to be caught by an intermediate event of the
+     * business process.
+     * 
+     * @param eventDescription
+     *            'When' phase of scenario.
+     * @param msgName
+     *            Specifies the message name identifying the Process Definition
+     *            to interact with.
+     * @param messageResource
+     *            Classpath resource to load and inject as process variable or
+     *            the variable itself as a string.
+     * @param tenantId
+     *            Process tenant, may be null.
+     * @return The updated specification.
+     */
+    public ActivitiSpec whenFollowUpMsgReceived(String eventDescription,
+            String msgName, String messageResource, String tenantId) {
+        this.messageName = msgName;
+
+        HashMap<String, Object> vars = new HashMap<String, Object>();
+        vars.put("messageName", adapt(msgName));
+        vars.put(adapt(messageName), getJson(messageResource));
+
+        activitiRule.getRuntimeService().signal(processInstance.getId(), vars);
+
+        writeBddPhrase("WHEN: %1$s", eventDescription);
+        return this;
+    }
+
+    protected String getJson(String messageResource) {
         InputStream is = null;
         Reader source = null;
         Scanner scanner = null;
@@ -211,17 +256,7 @@ public class ActivitiSpec {
                 ;
             }
         }
-        HashMap<String, Object> vars = new HashMap<String, Object>();
-        vars.put("messageName", adapt(msgName));
-        vars.put(adapt(messageName), json);
-        processInstance = activitiRule.getRuntimeService()
-                .startProcessInstanceByMessageAndTenantId(msgName, vars,
-                        tenantId);
-        assertNotNull(processInstance);
-        assertNotNull(processInstance.getId());
-
-        writeBddPhrase("WHEN: %1$s", eventDescription);
-        return this;
+        return json;
     }
 
     /**
@@ -406,12 +441,35 @@ public class ActivitiSpec {
 
     /**
      * Verify that the outcome of the scenario is that the process completed in
+     * the all the BPMN event ids.
+     * 
+     * @param endEventId
+     * @return The updated specification.
+     */
+    public ActivitiSpec thenProcessEndedAndInEndEvents(String... endEventIds) {
+        ProcessAssert.assertProcessEndedAndInEndEvents(processInstance,
+                endEventIds);
+        return this;
+    }
+
+    /**
+     * Verify that the outcome of the scenario is that the process completed in
      * the one and only BPMN event id.
      * 
      * @param endEventId
      * @return The updated specification.
      */
     public ActivitiSpec thenProcessEndedAndInExclusiveEndEvent(String endEventId) {
+        // ProcessInstance processInstance2 = activitiRule.getProcessEngine()
+        // .getRuntimeService().createProcessInstanceQuery()
+        // .processInstanceId(processInstance.getId()).singleResult();
+        HistoricProcessInstance processInstance2 = activitiRule
+                .getProcessEngine().getHistoryService()
+                .createHistoricProcessInstanceQuery()
+                .processInstanceId(processInstance.getId()).singleResult();
+        assertNotNull(processInstance2);
+        assertNotNull(processInstance2.getEndTime());
+
         ProcessAssert.assertProcessEndedAndInExclusiveEndEvent(processInstance,
                 endEventId);
         return this;
@@ -434,6 +492,7 @@ public class ActivitiSpec {
                     .processInstanceId(processInstance.getId())
                     .variableName(varName).singleResult().getValue();
         }
+        System.out.println(String.format("%1$s: %2$s", varName, var));
         assertNotNull(var);
         collectVars.put(varName, var);
         return this;
@@ -476,7 +535,7 @@ public class ActivitiSpec {
      * @return
      */
     public static Map<String, Object> buildMap(
-            @SuppressWarnings("unchecked") ImmutablePair<String, Object>... immutablePair) {
+            ImmutablePair<String, Object>... immutablePair) {
         Map<String, Object> map = new HashMap<String, Object>();
         for (ImmutablePair<String, Object> pair : immutablePair) {
             map.put(pair.getKey(), pair.getValue());
