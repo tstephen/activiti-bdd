@@ -36,6 +36,7 @@ import java.util.Set;
 
 import org.activiti.engine.ActivitiObjectNotFoundException;
 import org.activiti.engine.history.HistoricProcessInstance;
+import org.activiti.engine.identity.User;
 import org.activiti.engine.impl.test.JobTestHelper;
 import org.activiti.engine.runtime.Job;
 import org.activiti.engine.runtime.ProcessInstance;
@@ -428,19 +429,6 @@ public class ActivitiSpec {
 
     /**
      * Verify that the outcome of the scenario is that the process completed in
-     * the specified BPMN event id.
-     * 
-     * @param endEventIds
-     * @return The updated specification.
-     */
-    public ActivitiSpec assertProcessEndedAndInEndEvents(String... endEventIds) {
-        ProcessAssert.assertProcessEndedAndInEndEvents(processInstance,
-                endEventIds);
-        return this;
-    }
-
-    /**
-     * Verify that the outcome of the scenario is that the process completed in
      * the all the BPMN event ids.
      * 
      * @param endEventId
@@ -448,6 +436,9 @@ public class ActivitiSpec {
      */
     public ActivitiSpec thenProcessEndedAndInEndEvents(String... endEventIds) {
         ProcessAssert.assertProcessEndedAndInEndEvents(processInstance,
+                endEventIds);
+        writeBddPhrase(
+                "THEN: The process is complete and finished in these events %1$s",
                 endEventIds);
         return this;
     }
@@ -472,6 +463,22 @@ public class ActivitiSpec {
 
         ProcessAssert.assertProcessEndedAndInExclusiveEndEvent(processInstance,
                 endEventId);
+        writeBddPhrase(
+                "THEN: The process is complete and in the end event %1$s",
+                endEventId);
+        return this;
+    }
+
+    public ActivitiSpec thenUserExists(String userId, String... groupIds) {
+        User user = activitiRule.getIdentityService().createUserQuery()
+                .userId(userId).singleResult();
+        assertNotNull(user);
+
+        for (String groupId : groupIds) {
+            assertTrue(activitiRule.getIdentityService().createGroupQuery()
+                    .groupId(groupId).count() > 0);
+        }
+        writeBddPhrase("THEN: The user %1$s exists", userId);
         return this;
     }
 
