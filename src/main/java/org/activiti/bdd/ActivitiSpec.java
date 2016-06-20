@@ -36,6 +36,7 @@ import java.util.Set;
 
 import org.activiti.engine.ActivitiObjectNotFoundException;
 import org.activiti.engine.history.HistoricProcessInstance;
+import org.activiti.engine.history.HistoricTaskInstance;
 import org.activiti.engine.identity.User;
 import org.activiti.engine.impl.test.JobTestHelper;
 import org.activiti.engine.runtime.Job;
@@ -261,6 +262,63 @@ public class ActivitiSpec {
     }
 
     /**
+     * Script Task resulting from the scenario specification.
+     * 
+     * <p>
+     * Task will be asserted to have been completed, variables collected and/or
+     * updated and then completed.
+     * 
+     * @param taskDefinitionKey
+     *            Key (BPMN id) for task.
+     * @param collectVars
+     *            Variable names to collect in the scenario.
+     * @return The updated specification.
+     */
+    public ActivitiSpec thenScriptTask(String taskDefinitionKey,
+            Set<String> collectVars) {
+        return thenServiceTask(taskDefinitionKey, collectVars);
+    }
+
+    public ActivitiSpec thenScriptTask(String taskDefinitionKey) {
+        return thenServiceTask(taskDefinitionKey, emptySet);
+    }
+
+    /**
+     * Service Task resulting from the scenario specification.
+     * 
+     * <p>
+     * Task will be asserted to have been completed, variables collected and/or
+     * updated and then completed.
+     * 
+     * @param taskDefinitionKey
+     *            Key (BPMN id) for service task.
+     * @param collectVars
+     *            Variable names to collect in the scenario.
+     * @return The updated specification.
+     */
+    public ActivitiSpec thenServiceTask(String taskDefinitionKey,
+            Set<String> collectVars) {
+        List<HistoricTaskInstance> tasks = activitiRule.getHistoryService()
+                .createHistoricTaskInstanceQuery()
+                .taskDefinitionKey(taskDefinitionKey).list();
+
+        assertTrue("Did not find the expected task with key "
+                + taskDefinitionKey, tasks.size() != 0);
+
+        for (String varName : collectVars) {
+            collectVar(varName);
+        }
+
+        writeBddPhrase("THEN: Task '%1$s' was created and completed",
+                taskDefinitionKey);
+        return this;
+    }
+
+    public ActivitiSpec thenServiceTask(String taskDefinitionKey) {
+        return thenServiceTask(taskDefinitionKey, emptySet);
+    }
+
+    /**
      * User Task resulting from the scenario specification.
      * 
      * <p>
@@ -479,6 +537,11 @@ public class ActivitiSpec {
                     .groupId(groupId).count() > 0);
         }
         writeBddPhrase("THEN: The user %1$s exists", userId);
+        return this;
+    }
+
+    public ActivitiSpec thenUserAuthenticated(String userId, String newPwd) {
+        activitiRule.getIdentityService().checkPassword(userId, newPwd);
         return this;
     }
 
