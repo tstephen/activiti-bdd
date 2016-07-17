@@ -35,6 +35,7 @@ import java.util.Scanner;
 import java.util.Set;
 
 import org.activiti.engine.ActivitiObjectNotFoundException;
+import org.activiti.engine.history.HistoricActivityInstance;
 import org.activiti.engine.history.HistoricProcessInstance;
 import org.activiti.engine.history.HistoricTaskInstance;
 import org.activiti.engine.identity.User;
@@ -527,6 +528,16 @@ public class ActivitiSpec {
         return this;
     }
 
+
+    public ActivitiSpec thenTimerExpired(String timerEventId) {
+        List<HistoricActivityInstance> activities = activitiRule
+                .getHistoryService().createHistoricActivityInstanceQuery()
+                .activityId(timerEventId).list();
+        assertEquals(1, activities.size());
+        writeBddPhrase("THEN: The timer %1$s expired", timerEventId);
+        return this;
+    }
+
     public ActivitiSpec thenUserExists(String userId, String... groupIds) {
         User user = activitiRule.getIdentityService().createUserQuery()
                 .userId(userId).singleResult();
@@ -616,5 +627,6 @@ public class ActivitiSpec {
     public static Set<String> emptySet() {
         return emptySet;
     }
+
 
 }
