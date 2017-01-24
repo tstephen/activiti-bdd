@@ -10,7 +10,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  * Activiti Behaviour Driven Development (BDD) library
  * Copyright 2015 Tim Stephenson
  *
@@ -40,6 +40,7 @@ import org.activiti.engine.history.HistoricProcessInstance;
 import org.activiti.engine.history.HistoricTaskInstance;
 import org.activiti.engine.identity.User;
 import org.activiti.engine.impl.test.JobTestHelper;
+import org.activiti.engine.runtime.Execution;
 import org.activiti.engine.runtime.Job;
 import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
@@ -88,10 +89,10 @@ public class ActivitiSpec {
 
     /**
      * Write a BDD phrase (Given, When or Then ...).
-     * 
+     *
      * <p>
      * Default implementation writes to System.out.
-     * 
+     *
      * @param phrase
      */
     protected void writeBddPhrase(String phrase) {
@@ -100,10 +101,10 @@ public class ActivitiSpec {
 
     /**
      * Write a BDD phrase (Given, When or Then ...).
-     * 
+     *
      * <p>
      * Default implementation writes to System.out.
-     * 
+     *
      * @param phrase
      * @param args
      *            Substitution arguments for phrase.
@@ -142,7 +143,7 @@ public class ActivitiSpec {
 
     /**
      * Define the start event for the business process.
-     * 
+     *
      * @param eventDescription
      *            'When' phase of scenario.
      * @param key
@@ -176,7 +177,7 @@ public class ActivitiSpec {
 
     /**
      * Define the message start event for the business process.
-     * 
+     *
      * @param eventDescription
      *            'When' phase of scenario.
      * @param msgName
@@ -210,7 +211,7 @@ public class ActivitiSpec {
     /**
      * Define the message to send to be caught by an intermediate event of the
      * business process.
-     * 
+     *
      * @param eventDescription
      *            'When' phase of scenario.
      * @param msgName
@@ -225,13 +226,50 @@ public class ActivitiSpec {
      */
     public ActivitiSpec whenFollowUpMsgReceived(String eventDescription,
             String msgName, String messageResource, String tenantId) {
+        List<Execution> executions = activitiRule.getRuntimeService()
+                .createExecutionQuery()
+                .processInstanceId(processInstance.getId()).activityId(msgName)
+                .list();
+        assertTrue(String.format(
+                "Process with id '%1$s' not waiting for message '%2$s'",
+                processInstance.getId(), msgName), executions.size() == 1);
+
         this.messageName = msgName;
 
         HashMap<String, Object> vars = new HashMap<String, Object>();
         vars.put("messageName", adapt(msgName));
         vars.put(adapt(messageName), getJson(messageResource));
 
-        activitiRule.getRuntimeService().signal(processInstance.getId(), vars);
+        activitiRule.getRuntimeService()
+                .signal(executions.get(0).getId(), vars);
+
+        writeBddPhrase("WHEN: %1$s", eventDescription);
+        return this;
+    }
+
+    /**
+     * Define the signal awaited by an intermediate event of the
+     * business process.
+     *
+     * @param eventDescription
+     *            'When' phase of scenario.
+     * @param signalName
+     *            Specifies the message name identifying the Process Definition
+     *            to interact with.
+     * @param tenantId
+     *            Process tenant, may be null.
+     * @return The updated specification.
+     */
+    public ActivitiSpec whenSignalReceived(String eventDescription,
+            String signalName, String tenantId) {
+        List<Execution> executions = activitiRule.getRuntimeService()
+                .createExecutionQuery().signalEventSubscriptionName(signalName)
+                .list();
+        assertTrue(String.format(
+                "Process with id '%1$s' not waiting for signal '%2$s'",
+                processInstance.getId(), signalName), executions.size() == 1);
+
+        activitiRule.getRuntimeService().signalEventReceived(signalName, executions.get(0).getId());
 
         writeBddPhrase("WHEN: %1$s", eventDescription);
         return this;
@@ -263,12 +301,43 @@ public class ActivitiSpec {
     }
 
     /**
-     * Script Task resulting from the scenario specification.
-     * 
+     * Receive Task resulting from the scenario specification.
+     *
      * <p>
      * Task will be asserted to have been completed, variables collected and/or
      * updated and then completed.
-     * 
+     *
+     * @param taskDefinitionKey
+     *            Key (BPMN id) for receive task or intermediate event.
+     * @param collectVars
+     *            Variable names to collect in the scenario.
+     * @return The updated specification.
+     */
+    public ActivitiSpec thenWaitingAt(String taskDefinitionKey,
+            Set<String> collectVars) {
+        List<Execution> executions = activitiRule.getRuntimeService()
+                .createExecutionQuery()
+                .processInstanceId(processInstance.getId())
+                .activityId(taskDefinitionKey).list();
+        assertTrue("Did not find the expected task with key "
+                + taskDefinitionKey, executions.size() == 1);
+
+        for (String varName : collectVars) {
+            collectVar(varName);
+        }
+
+        writeBddPhrase("THEN: Process waiting at '%1$s' as expected",
+                taskDefinitionKey);
+        return this;
+    }
+
+    /**
+     * Script Task resulting from the scenario specification.
+     *
+     * <p>
+     * Task will be asserted to have been completed, variables collected and/or
+     * updated and then completed.
+     *
      * @param taskDefinitionKey
      *            Key (BPMN id) for task.
      * @param collectVars
@@ -286,11 +355,11 @@ public class ActivitiSpec {
 
     /**
      * Service Task resulting from the scenario specification.
-     * 
+     *
      * <p>
      * Task will be asserted to have been completed, variables collected and/or
      * updated and then completed.
-     * 
+     *
      * @param taskDefinitionKey
      *            Key (BPMN id) for service task.
      * @param collectVars
@@ -321,11 +390,11 @@ public class ActivitiSpec {
 
     /**
      * User Task resulting from the scenario specification.
-     * 
+     *
      * <p>
      * Task will be asserted to exist, variables collected and/or updated and
      * then completed.
-     * 
+     *
      * @param taskDefinitionKey
      *            Key (BPMN id) for user task.
      * @param collectVars
@@ -361,13 +430,24 @@ public class ActivitiSpec {
         return this;
     }
 
+    public ActivitiSpec thenVariableEquals(String varName, Object varExpectedVal)
+            throws Exception {
+        Object varActualVal = activitiRule.getRuntimeService().getVariable(
+                processInstance.getId(),
+                varName);
+        assertEquals(varExpectedVal, varActualVal);
+
+        writeBddPhrase("THEN: variable '%1$s' has the expected value", varName);
+        return this;
+    }
+
     /**
      * Execute an extension action for the scenario.
-     * 
+     *
      * <p>
      * For example may be used to change state the process will subsequently
      * need or to perform custom assertions about the scenario.
-     * 
+     *
      * @param action
      * @return The updated specification.
      * @throws Exception
@@ -382,7 +462,7 @@ public class ActivitiSpec {
     /**
      * A scenario event allowing the process engine to execute for the specified
      * period.
-     * 
+     *
      * @param maxMillisToWait
      *            Maximum milli-seconds to allow the engine to execute.
      * @return The updated specification.
@@ -401,7 +481,7 @@ public class ActivitiSpec {
     /**
      * A scenario event allowing the process engine to execute for the specified
      * period.
-     * 
+     *
      * @param timeout
      *            Maximum milli-seconds to allow the engine to execute.
      * @return The updated specification.
@@ -416,7 +496,7 @@ public class ActivitiSpec {
 
     /**
      * Advances process engine by the specified amount of time.
-     * 
+     *
      * @param field
      *            One of the field constants in java.util.Calendar.
      * @param amount
@@ -439,7 +519,7 @@ public class ActivitiSpec {
     /**
      * Assert that the specified sub-process callActivity has actually been
      * invoked.
-     * 
+     *
      * @param subProcDefKey
      *            Key (id without vsn info) of the sub-process that should have
      *            been invoked.
@@ -477,7 +557,7 @@ public class ActivitiSpec {
 
     /**
      * Verify that the outcome of the scenario is that the process is complete.
-     * 
+     *
      * @return The updated specification.
      */
     public ActivitiSpec thenProcessIsComplete() {
@@ -489,7 +569,7 @@ public class ActivitiSpec {
     /**
      * Verify that the outcome of the scenario is that the process completed in
      * the all the BPMN event ids.
-     * 
+     *
      * @param endEventId
      * @return The updated specification.
      */
@@ -498,14 +578,14 @@ public class ActivitiSpec {
                 endEventIds);
         writeBddPhrase(
                 "THEN: The process is complete and finished in these events %1$s",
-                endEventIds);
+                (Object[]) endEventIds);
         return this;
     }
 
     /**
      * Verify that the outcome of the scenario is that the process completed in
      * the one and only BPMN event id.
-     * 
+     *
      * @param endEventId
      * @return The updated specification.
      */
@@ -538,6 +618,16 @@ public class ActivitiSpec {
         return this;
     }
 
+    public ActivitiSpec thenEventOccurred(String eventId) {
+        List<HistoricActivityInstance> activities = activitiRule
+                .getHistoryService().createHistoricActivityInstanceQuery()
+                .activityId(eventId).list();
+        assertTrue(activities.size() >= 1);
+
+        writeBddPhrase("THEN: The event %1$s occurred", eventId);
+        return this;
+    }
+
     public ActivitiSpec thenUserExists(String userId, String... groupIds) {
         User user = activitiRule.getIdentityService().createUserQuery()
                 .userId(userId).singleResult();
@@ -557,7 +647,7 @@ public class ActivitiSpec {
     }
 
     /**
-     * 
+     *
      * @param varName
      * @return The updated specification.
      */
@@ -585,7 +675,7 @@ public class ActivitiSpec {
 
     /**
      * Creates an immutable pair to specify a process variable.
-     * 
+     *
      * @param varName
      * @param varValue
      * @return an immutable pair representing a scenario variable.
@@ -597,7 +687,7 @@ public class ActivitiSpec {
 
     /**
      * Convenience method to create a set of strings.
-     * 
+     *
      * @param strings
      * @return
      */
@@ -611,7 +701,7 @@ public class ActivitiSpec {
 
     /**
      * Convenience method to create variable map.
-     * 
+     *
      * @param immutablePair
      * @return
      */
