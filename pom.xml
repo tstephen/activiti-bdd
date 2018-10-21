@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   
   <groupId>org.activiti</groupId>
-  <version>5.19.0.20161207</version>
+  <version>5.19.0.20181021</version>
   <artifactId>activiti-bdd</artifactId>
   <name>Activiti - BDD</name>
   <description>Support for applying Behaviour Driven Development approach to Activiti</description>

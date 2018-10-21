@@ -402,8 +402,52 @@ public class ActivitiSpec {
      * @param putVars
      *            Variables to be injected into the process context.
      * @return The updated specification.
+     * @deprecated split into thenUserTaskExists and whenUserTaskCompleted
      */
     public ActivitiSpec thenUserTask(String taskDefinitionKey,
+            Set<String> collectVars, Map<String, Object> putVars) {
+        writeBddPhrase("THEN: User Task '%1$s' is created", taskDefinitionKey);
+        return whenUserTaskCompleted(taskDefinitionKey, collectVars, putVars);
+    }
+
+    /**
+     * User Task resulting from the scenario specification.
+     *
+     * <p>
+     * Task will be asserted to exist, variables collected and/or updated and
+     * then completed.
+     *
+     * @param taskDefinitionKey
+     *            Key (BPMN id) for user task.
+     * @return The updated specification.
+     */
+    public ActivitiSpec thenUserTaskExists(String taskDefinitionKey) {
+        Task task = activitiRule.getTaskService().createTaskQuery()
+                .singleResult();
+        assertNotNull("Did not find the expected task with key "
+                + taskDefinitionKey, task);
+        assertEquals(taskDefinitionKey, task.getTaskDefinitionKey());
+
+        writeBddPhrase("THEN: User Task '%1$s' is created", taskDefinitionKey);
+        return this;
+    }
+
+    /**
+     * Complete the specified User Task.
+     *
+     * <p>
+     * Task will be asserted to exist, variables collected and/or updated and
+     * then completed.
+     *
+     * @param taskDefinitionKey
+     *            Key (BPMN id) for user task.
+     * @param collectVars
+     *            Variable names to collect in the scenario.
+     * @param putVars
+     *            Variables to be injected into the process context.
+     * @return The updated specification.
+     */
+    public ActivitiSpec whenUserTaskCompleted(String taskDefinitionKey,
             Set<String> collectVars, Map<String, Object> putVars) {
         Task task = activitiRule.getTaskService().createTaskQuery()
                 .singleResult();
@@ -425,7 +469,7 @@ public class ActivitiSpec {
             ProcessAssert.assertProcessVariableLatestValueEquals(
                     processInstance, entry.getKey(), entry.getValue());
         }
-        writeBddPhrase("THEN: User Task '%1$s' is created and completed",
+        writeBddPhrase("WHEN: User Task '%1$s' is completed",
                 taskDefinitionKey);
         return this;
     }
@@ -531,10 +575,53 @@ public class ActivitiSpec {
         }
 
         boolean found = searchForSubProc(subProcDefKey, processInstance.getId());
-        
+
         assertTrue(String.format("No call made to %1$s", subProcDefKey), found);
         writeBddPhrase("THEN: The sub-process %1$s is called", subProcDefKey);
         return this;
+    }
+
+    /**
+     * Assert that the specified sub-process has actually been
+     * invoked from the named callActivity.
+     *
+     * @param subProcDefKey
+     *            Key (id without vsn info) of the sub-process that should have
+     *            been invoked.
+     * @return The updated specification.
+     */
+    public ActivitiSpec thenSubProcessCalled(String subProcDefKey, String callActivityId) {
+        if (subProcDefKey == null) {
+            throw new IllegalArgumentException("Parameter subProcKey must not be null");
+        }
+
+        boolean found = searchForSubProc(subProcDefKey, callActivityId, processInstance.getId());
+
+        assertTrue(String.format("No call made to %1$s", subProcDefKey), found);
+        writeBddPhrase("THEN: The sub-process %1$s is called", subProcDefKey);
+        return this;
+    }
+
+    private boolean searchForSubProc(String subProcDefKey, String callActivityId, String procId) {
+        List<HistoricActivityInstance> callActivities = activitiRule
+                .getHistoryService().createHistoricActivityInstanceQuery().activityId(callActivityId).list();
+
+        for (HistoricActivityInstance hai : callActivities) {
+            if (hai.getCalledProcessInstanceId() == null) {
+                return false;
+            } else {
+                List<HistoricProcessInstance> childProcessInstances = activitiRule
+                      .getHistoryService().createHistoricProcessInstanceQuery()
+                      .processInstanceId(hai.getCalledProcessInstanceId()).list();
+                return childProcessInstances.get(0).getProcessDefinitionId().startsWith(subProcDefKey);
+            }
+        }
+        for (HistoricActivityInstance hai : callActivities) {
+            if (searchForSubProc(subProcDefKey, callActivityId, hai.getId())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean searchForSubProc(String subProcDefKey, String procId) {
